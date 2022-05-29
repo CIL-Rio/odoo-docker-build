@@ -1,6 +1,5 @@
-FROM debian:bullseye-slim
-MAINTAINER Odoo S.A. <info@odoo.com>
-
+FROM debian:bullseye-slim as base
+ARG TARGETARCH
 SHELL ["/bin/bash", "-xo", "pipefail", "-c"]
 
 # Generate locale C.UTF-8 for postgres and general locale data
@@ -30,13 +29,27 @@ RUN apt-get update && \
         python3-watchdog \
         python3-xlrd \
         python3-xlwt \
-        xz-utils \
-    && curl -o wkhtmltox.deb -sSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.5/wkhtmltox_0.12.5-1.buster_amd64.deb \
+        xz-utils 
+
+FROM base AS base-amd64
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -o wkhtmltox.deb -sSL https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.5/wkhtmltox_0.12.5-1.buster_amd64.deb \
     && echo 'ea8277df4297afc507c61122f3c349af142f31e5 wkhtmltox.deb' | sha1sum -c - \
     && apt-get install -y --no-install-recommends ./wkhtmltox.deb \
     && rm -rf /var/lib/apt/lists/* wkhtmltox.deb
 
+FROM base AS base-arm64
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -o wkhtmltox.deb -sSL https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6-1/wkhtmltox_0.12.6-1.buster_arm64.deb \
+    && echo '43d0db99ab0e6b5f60b465a49c764c50d6b31337 wkhtmltox.deb' | sha1sum -c - \
+    && apt-get install -y --no-install-recommends ./wkhtmltox.deb \
+    && rm -rf /var/lib/apt/lists/* wkhtmltox.deb
+
+
 # install latest postgresql-client
+
+FROM base-${TARGETARCH}
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN echo 'deb http://apt.postgresql.org/pub/repos/apt/ bullseye-pgdg main' > /etc/apt/sources.list.d/pgdg.list \
     && GNUPGHOME="$(mktemp -d)" \
     && export GNUPGHOME \
@@ -55,8 +68,8 @@ RUN npm install -g rtlcss
 
 # Install Odoo
 ENV ODOO_VERSION 15.0
-ARG ODOO_RELEASE=20220401
-ARG ODOO_SHA=47f9d71dcfd0c0884969b361bc1bbe5f45fb3ac5
+ARG ODOO_RELEASE=20220425
+ARG ODOO_SHA=20dcece1bc2e25cf3950a419074b127dd7ef8c0f
 RUN curl -o odoo.deb -sSL http://nightly.odoo.com/${ODOO_VERSION}/nightly/deb/odoo_${ODOO_VERSION}.${ODOO_RELEASE}_all.deb \
     && echo "${ODOO_SHA} odoo.deb" | sha1sum -c - \
     && apt-get update \
